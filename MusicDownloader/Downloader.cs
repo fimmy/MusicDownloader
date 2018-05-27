@@ -236,6 +236,10 @@ namespace MusicDownloader
             {
                 Directory.CreateDirectory(this.dir);
             }
+            if (filename.Contains("/"))
+            {
+                filename = filename.Replace("/", "、");
+            }
             bool flag = File.Exists(this.dir + "/" + filename);
             if (!flag)
             {
@@ -246,11 +250,7 @@ namespace MusicDownloader
                         throw new Exception("url empty");
                     }
                     WebClient myWebClient = new WebClient();
-                    if (filename.Contains("/"))
-                    {
-                        filename = filename.Replace("/", "");
 
-                    }
                     myWebClient.DownloadFile(URL, this.dir + "/" + filename);
                 }
                 catch (Exception ex)

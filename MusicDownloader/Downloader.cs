@@ -113,13 +113,13 @@ namespace MusicDownloader
                 {
                     try
                     {
-                        var song = GetSongFromQQNew(item.title, item.authors[0]??"");
+                        var song = GetSongFromQQNew(item.title, item.authors[0] ?? "");
                         if (!string.IsNullOrEmpty(song.url))
                         {
                             item.oldauthor = item.author;
                             item.oldtitle = item.title;
                             item.title = song.title;
-                            item.authors = new string[]{ song.author };
+                            item.authors = new string[] { song.author };
                             item.url = song.url;
                             item.source = song.source;
                         }
@@ -186,7 +186,8 @@ namespace MusicDownloader
             var song = new Song();
             try
             {
-                var uri = $"https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?is_xml=0&format=json&key={title} {author}&g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
+                var titleauthor = $"{title} {author}".Trim();
+                var uri = $"https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?is_xml=0&format=json&key={titleauthor}&g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
                 var json = GetJSON(uri);
                 JObject jobject = JObject.Parse(json);
                 JObject jobject2 = JObject.Parse(jobject["data"].ToString());
@@ -202,9 +203,10 @@ namespace MusicDownloader
                         //根据mid获取歌曲的mediaid
                         var mediamiduri = $"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={mid}&tpl=yqq_song_detail&format=json&g_tk=5381&loginUin=0&hostUin=0&format=jsonp&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
                         var songdownloadurl = GetJSON(mediamiduri);
-                        var realmid = JObject.Parse(songdownloadurl)["data"][0]["file"]["media_mid"].ToString();
-                        var singer = jobject4["singer"].ToString();
-                        var songname = jobject4["name"].ToString();
+                        var songjson = JObject.Parse(songdownloadurl)["data"][0];
+                        var realmid = songjson["file"]["media_mid"].ToString();
+                        var singer = string.Join("、", songjson["singer"].Select(i => i["name"].ToString()).ToArray());
+                        var songname = songjson["title"].ToString();
 
                         var qqurl = string.Concat(new string[]
                         {
@@ -226,6 +228,55 @@ namespace MusicDownloader
             }
             catch (Exception)
             {
+                if (!string.IsNullOrEmpty(author))
+                {
+                    song = GetSongFromQQNew(title, "");
+
+                }
+                else
+                {
+                    song = GetQQMusicSearch(title);
+                }
+                return song;
+            }
+
+        }
+        public Song GetQQMusicSearch(string title)
+        {
+
+            var song = new Song();
+            try
+            {
+                string json = this.GetJSON("http://s.music.qq.com/fcgi-bin/music_search_new_platform?t=0&n=1&aggr=1&cr=1&loginUin=0&format=json&inCharset=GB2312&outCharset=utf-8&notice=0&platform=jqminiframe.json&needNewCode=0&p=1&catZhida=0&remoteplace=sizer.newclient.next_song&w=" + title.Trim());
+                JObject jobject = JObject.Parse(json);
+                JObject jobject2 = JObject.Parse(jobject["data"].ToString());
+                JObject jobject3 = JObject.Parse(jobject2["song"].ToString());
+                JArray jarray = JArray.Parse(jobject3["list"].ToString());
+                JObject jobject4 = JObject.Parse(jarray[0].ToString());
+                var mid = jobject4["f"].ToString().Split('|')[20].ToString();
+                var mediamiduri = $"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={mid}&tpl=yqq_song_detail&format=json&g_tk=5381&loginUin=0&hostUin=0&format=jsonp&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
+                var songdownloadurl = GetJSON(mediamiduri);
+                var songjson = JObject.Parse(songdownloadurl)["data"][0];
+                var realmid = songjson["file"]["media_mid"].ToString();
+                var singer = string.Join("、", songjson["singer"].Select(i => i["name"].ToString()).ToArray());
+                var songname = songjson["title"].ToString();
+
+                var qqurl = string.Concat(new string[]
+                {
+                          "http://dl.stream.qqmusic.qq.com/M800",
+                        realmid,
+                        ".mp3?vkey=",
+                        GetQQMusic_vkey(),
+                        "&guid=5150825362&fromtag=1"
+                });
+                song.url = qqurl;
+                song.authors = new string[] { singer };
+                song.title = songname;
+                song.source = "QQ音乐";
+                return song;
+            }
+            catch (Exception)
+            {
                 return song;
             }
 
@@ -236,9 +287,11 @@ namespace MusicDownloader
             {
                 Directory.CreateDirectory(this.dir);
             }
-            if (filename.Contains("/"))
+            filename = filename.Replace("/", "、");
+            string invalid = new string(Path.GetInvalidFileNameChars());
+            foreach (char c in invalid)
             {
-                filename = filename.Replace("/", "、");
+                filename = filename.Replace(c.ToString(), "");
             }
             bool flag = File.Exists(this.dir + "/" + filename);
             if (!flag)

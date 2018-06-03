@@ -20,6 +20,7 @@ namespace MusicDownloader
         private Worksheet worksheet;
         public Downloader(string id, Worksheet ws)
         {
+            this.dir = "";
             log = LogManager.GetCurrentClassLogger();
             worksheet = ws;
             this.id = id;
@@ -226,7 +227,7 @@ namespace MusicDownloader
 
                 return song;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 if (!string.IsNullOrEmpty(author))
                 {
@@ -237,6 +238,112 @@ namespace MusicDownloader
                 {
                     song = GetQQMusicSearch(title);
                 }
+                return song;
+            }
+
+        }
+        public Song GetSongFromQQWithAuthor(string title, string author)
+        {
+            var song = new Song();
+            try
+            {
+                var titleauthor = $"{title}".Trim();
+                var uri = $"https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?is_xml=0&format=json&key={titleauthor}&g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
+                var json = GetJSON(uri);
+                JObject jobject = JObject.Parse(json);
+                JObject jobject2 = JObject.Parse(jobject["data"].ToString());
+                JObject jobject3 = JObject.Parse(jobject2["song"].ToString());
+                var count = int.Parse(jobject3["count"].ToString());
+                if (count > 0)
+                {
+                    JArray jarray = JArray.Parse(jobject3["itemlist"].ToString());
+                    var thesong = jobject3["itemlist"].FirstOrDefault(a => a["singer"].ToString().Contains(author) && a["name"].ToString().Contains(title));
+                    if (thesong != null)
+                    {
+                        if (jarray.Count > 0)
+                        {
+                            JObject jobject4 = JObject.Parse(thesong.ToString());
+                            var mid = jobject4["mid"].ToString();
+                            //根据mid获取歌曲的mediaid
+                            var mediamiduri = $"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={mid}&tpl=yqq_song_detail&format=json&g_tk=5381&loginUin=0&hostUin=0&format=jsonp&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
+                            var songdownloadurl = GetJSON(mediamiduri);
+                            var songjson = JObject.Parse(songdownloadurl)["data"][0];
+                            var realmid = songjson["file"]["media_mid"].ToString();
+                            var singer = string.Join("、", songjson["singer"].Select(i => i["name"].ToString()).ToArray());
+                            var songname = songjson["title"].ToString();
+
+                            var qqurl = string.Concat(new string[]
+                            {
+                        "http://dl.stream.qqmusic.qq.com/M800",
+                        realmid,
+                        ".mp3?vkey=",
+                        GetQQMusic_vkey(),
+                        "&guid=5150825362&fromtag=1"
+                            });
+
+                            song.url = qqurl;
+                            song.authors = new string[] { singer };
+                            song.title = songname;
+                            song.source = "QQ音乐";
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception("无匹配");
+                    }
+                }
+
+                return song;
+            }
+            catch (Exception ex)
+            {
+                song = GetQQMusicSearchWithAuthor(title,author);
+                return song;
+            }
+
+        }
+        public Song GetQQMusicSearchWithAuthor(string title,string author)
+        {
+
+            var song = new Song();
+            try
+            {
+                var searchcount = 10;
+                string json = this.GetJSON("http://s.music.qq.com/fcgi-bin/music_search_new_platform?t=0&n={searchcount}&aggr=1&cr=1&loginUin=0&format=json&inCharset=GB2312&outCharset=utf-8&notice=0&platform=jqminiframe.json&needNewCode=0&p=1&catZhida=0&remoteplace=sizer.newclient.next_song&w=" + title.Trim());
+                JObject jobject = JObject.Parse(json);
+                JObject jobject2 = JObject.Parse(jobject["data"].ToString());
+                JObject jobject3 = JObject.Parse(jobject2["song"].ToString());
+                JArray jarray = JArray.Parse(jobject3["list"].ToString());
+                var getsong = jarray.FirstOrDefault(a => a["fsinger"].ToString().Contains(author) && a["fsong"].ToString().Contains(title));
+                if (getsong==null)
+                {
+                    throw new Exception("无匹配");
+                }
+                JObject jobject4 = JObject.Parse(getsong.ToString());
+                var mid = jobject4["f"].ToString().Split('|')[20].ToString();
+                var mediamiduri = $"https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid={mid}&tpl=yqq_song_detail&format=json&g_tk=5381&loginUin=0&hostUin=0&format=jsonp&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0";
+                var songdownloadurl = GetJSON(mediamiduri);
+                var songjson = JObject.Parse(songdownloadurl)["data"][0];
+                var realmid = songjson["file"]["media_mid"].ToString();
+                var singer = string.Join("、", songjson["singer"].Select(i => i["name"].ToString()).ToArray());
+                var songname = songjson["title"].ToString();
+
+                var qqurl = string.Concat(new string[]
+                {
+                          "http://dl.stream.qqmusic.qq.com/M800",
+                        realmid,
+                        ".mp3?vkey=",
+                        GetQQMusic_vkey(),
+                        "&guid=5150825362&fromtag=1"
+                });
+                song.url = qqurl;
+                song.authors = new string[] { singer };
+                song.title = songname;
+                song.source = "QQ音乐";
+                return song;
+            }
+            catch (Exception)
+            {
                 return song;
             }
 
@@ -283,9 +390,12 @@ namespace MusicDownloader
         }
         public void DownloadFile(string URL, string filename)
         {
-            if (!Directory.Exists(this.dir))
+            if (!string.IsNullOrEmpty(this.dir))
             {
-                Directory.CreateDirectory(this.dir);
+                if (!Directory.Exists(this.dir))
+                {
+                    Directory.CreateDirectory(this.dir);
+                }
             }
             filename = filename.Replace("/", "、");
             string invalid = new string(Path.GetInvalidFileNameChars());
@@ -293,7 +403,8 @@ namespace MusicDownloader
             {
                 filename = filename.Replace(c.ToString(), "");
             }
-            bool flag = File.Exists(this.dir + "/" + filename);
+            var filepath = string.IsNullOrEmpty(this.dir) ? filename : this.dir + "/" + filename;
+            bool flag = File.Exists(filepath);
             if (!flag)
             {
                 try
@@ -304,11 +415,25 @@ namespace MusicDownloader
                     }
                     WebClient myWebClient = new WebClient();
 
-                    myWebClient.DownloadFile(URL, this.dir + "/" + filename);
+                    myWebClient.DownloadFile(URL, filepath);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    throw ex;
+                    try
+                    {
+                        if (string.IsNullOrEmpty(URL))
+                        {
+                            throw new Exception("url empty");
+                        }
+                        WebClient myWebClient = new WebClient();
+
+                        myWebClient.DownloadFile(URL.Replace("M800","M500"), filepath);
+                    }
+                    catch (Exception ex)
+                    {
+
+                        throw ex;
+                    }
                 }
             }
         }

@@ -16,6 +16,12 @@ namespace MusicDownloader
     {
         static void Main(string[] args)
         {
+            var log = NLog.LogManager.GetCurrentClassLogger();
+            log.Info("开始");
+            //var dl = new Downloader("", null);
+            //var song = dl.GetQQMusicSearch("无忘花");
+            //var song = dl.GetQQMusicSearch("无忘花");
+            //dl.DownloadFile(song.url, $"{song.author} - {song.title}.mp3");
             var array = new string[]
             {
                 "83169609",
@@ -27,10 +33,9 @@ namespace MusicDownloader
                 "915946943",
                 "576742030"
             };
-            var log = NLog.LogManager.GetCurrentClassLogger();
+
             var workbook = new Workbook();
             workbook.Worksheets.RemoveAt(0);
-            log.Info("开始");
             foreach (var item in array)
             {
                 var wsindex = workbook.Worksheets.Add();
